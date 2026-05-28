@@ -290,6 +290,10 @@ for epoch in range(num_epochs):
         batch_reward_scores = compute_reward(batch_answers, answers_K) # (batch_size*K, 1)
         batch_rewards = torch.tensor([bfs + brs for bfs, brs in zip(batch_format_scores, batch_reward_scores)], dtype=torch.float16)
         batch_rewards = batch_rewards.view(batch_size, K) # (batch_size, K)
+        if master_process :
+            print(f'reward at step {step} is: {batch_rewards.mean():.4f}')
+            with open(log_file, "a") as f:
+                f.write(f'reward at step {step} is: {batch_rewards.mean():.4f}\n')
         batch_advantages = (batch_rewards - batch_rewards.mean(dim = -1, keepdim = True)) / batch_rewards.std(dim = -1, keepdim = True).clamp_min(1e-6)
         batch_advantages = batch_advantages.to(local_rank) # (batch_size, K)
         assert batch_advantages.shape == (batch_size, K)
@@ -319,10 +323,20 @@ for epoch in range(num_epochs):
             valid_mask = batch_action_mask[:, :-1].contiguous().float().view(batch_size, K, -1) # [batch_size, K, seq_len - 1] # This is because the default pytorch average is not taken over the valid tokens 
             # compute prob ratios
             ratio = torch.exp(logprobs_new - logprobs_old) # [batch_size, K, seq_len - 1]
+            clip_fraction = (ratio < 1.0 - ppo_clip_range | ratio > 1.0 + ppo_clip_range).float().sum() / valid_mask.sum()
+            if master_process:
+                print(f'clip_fraction at step {step} with ppo epoch {ppo_epoch} is: {clip_fraction:.4f}')
+                with open(log_file, "a") as f:
+                    f.write(f'clip_fraction at step {step} with ppo epoch {ppo_epoch} is: {clip_fraction:.4f}\n')
             ratio_clipped = torch.clamp(ratio, 1.0 - ppo_clip_range, 1.0 + ppo_clip_range) # [batch_size, K, seq_len - 1]
             individual_ppo_reward = torch.min(ratio * batch_advantages, ratio_clipped * batch_advantages) # [batch_size, K, seq_len - 1]
             # compute KL penalty
             ratio_ref_log = logprobs_ref - logprobs_new # [batch_size, K, seq_len - 1]
+            if master_process:
+                kl_proxy = (ratio_ref_log.abs() * valid_mask).sum() / valid_mask.sum()
+                print(f'kl_proxy at step {step} with ppo epoch {ppo_epoch} is: {kl_proxy:.4f}')
+                with open(log_file, "a") as f:
+                    f.write(f'kl_proxy at step {step} with ppo epoch {ppo_epoch} is: {kl_proxy:.4f}\n')
             ratio_ref = torch.exp(ratio_ref_log) # [batch_size, K, seq_len - 1]
             individual_kl_penality = ratio_ref - ratio_ref_log - 1 # [batch_size, K, seq_len - 1]
             # compute the overall GRPO loss
