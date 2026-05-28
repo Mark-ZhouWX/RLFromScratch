@@ -323,7 +323,7 @@ for epoch in range(num_epochs):
             valid_mask = batch_action_mask[:, :-1].contiguous().float().view(batch_size, K, -1) # [batch_size, K, seq_len - 1] # This is because the default pytorch average is not taken over the valid tokens 
             # compute prob ratios
             ratio = torch.exp(logprobs_new - logprobs_old) # [batch_size, K, seq_len - 1]
-            clip_fraction = (ratio < 1.0 - ppo_clip_range | ratio > 1.0 + ppo_clip_range).float().sum() / valid_mask.sum()
+            clip_fraction = ((ratio < (1.0 - ppo_clip_range)).float().sum() + (ratio > (1.0 + ppo_clip_range)).float().sum()) / valid_mask.sum()
             if master_process:
                 print(f'clip_fraction at step {step} with ppo epoch {ppo_epoch} is: {clip_fraction:.4f}')
                 with open(log_file, "a") as f:
