@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from datasets import load_from_disk
+from datasets import load_from_disk, load_dataset
 from torch.utils.data import Dataset, DataLoader
 
 # extract the true answer 
@@ -103,7 +103,7 @@ initial_learning_rate = 1e-5
 # --------------------------------------
 # Load Model & Tokenizer
 # --------------------------------------
-model_name = "Your_favorite_model" # what I use: Llama-3.2-1B-Instruct
+model_name = "unsloth/Llama-3.2-1B-Instruct" # what I use: Llama-3.2-1B-Instruct
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 # Ensure pad token is defined (use eos as pad)
@@ -144,7 +144,7 @@ optimizer.zero_grad(set_to_none = True)
 # Prepare Log
 # --------------------------------------
 if master_process:
-    log_dir = ".../grpo_models"
+    log_dir = "work_dir/grpo_models"
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"log.txt")
     with open(log_file, "w") as f: # open for writing to clear the file
@@ -154,7 +154,7 @@ if master_process:
 # Load and Shard Dataset
 # --------------------------------------
 # Load GSM8K training split
-train_data = load_from_disk('gsm8k_data/')["train"]
+train_data = load_dataset('openai/gsm8k', name="main")["train"]
 
 class WrapperDataset(Dataset):
     """Dataset wrapper for preference data: yields (prompt, answer) pairs."""
